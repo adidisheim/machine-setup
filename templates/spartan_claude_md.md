@@ -83,11 +83,96 @@ ssh spartan "cat /home/adidishe/<PROJECT>/out/tmp_run_<jobid>.out"
 | `/data/projects/punim2039/<PROJECT>/data/` | Raw & processed data | **NEVER** |
 | `/data/projects/punim2039/<PROJECT>/res/` | Results, models, features, reports | **NEVER** |
 
+### Local Project Structure Convention
+
+Projects follow a standard layout locally. Code is organized in numbered stage directories, with shell and SLURM scripts under `scripts/`:
+
+```
+<PROJECT>/                               # Local project root
+├── _01_process_files/                   # Stage 1: raw data processing
+│   ├── _01_untar_files.py
+│   ├── _02_process_all_files_para.py
+│   └── _03_merge_files.py
+├── _02_summary_stats/                   # Stage 2: summary statistics
+│   └── _01_summary_stats_quick.py
+├── _03_feature_engeneering/             # Stage 3: feature engineering
+│   └── _01_feature_engineering_para.py
+├── _04_first_run_and_analysis/          # Stage 4: model training & analysis
+│   ├── _01_run.py
+│   ├── _02_win_probability_model.py
+│   └── ...
+├── utils_locals/                        # Shared utility modules
+│   ├── process_races.py
+│   ├── feature_tools.py
+│   ├── loader.py
+│   └── parser.py
+├── scripts/
+│   ├── sh/                              # Shell scripts (run locally)
+│   │   ├── code_to_spartan.sh           # Deploy all code to Spartan
+│   │   ├── push_to_spartan.sh           # Push data files to Spartan
+│   │   ├── load_down_data.sh            # Download from /data/projects/punim2039/
+│   │   └── load_down_home.sh            # Download from /home/adidishe/
+│   └── slurm/                           # SLURM job scripts (copied to Spartan)
+│       ├── load_module.sh               # Module loader + venv activation
+│       └── _*.slurm                     # Job scripts (match Python script names)
+├── parameters.py                        # Grid search / hyperparameter configs
+├── data/                                # Local data (mirrors Spartan /data/projects/punim2039/<PROJECT>/data/)
+└── res/                                 # Local results (mirrors Spartan /data/projects/punim2039/<PROJECT>/res/)
+```
+
+**Naming conventions:**
+- `_XX_` prefix = pipeline stage number (run in order)
+- Within a stage, `_01_`, `_02_` etc. = execution order
+- SLURM scripts match the Python script they run (e.g., `_01_run_0.slurm` runs `_01_run.py` with model_type=0)
+
+### scripts/sh/ — Shell Helper Scripts
+
+These scripts run **locally** to transfer code and data to/from Spartan:
+
+| Script | Purpose | Direction |
+|--------|---------|-----------|
+| `code_to_spartan.sh` | Deploy all `.py` + `.slurm` files to Spartan | Local → Spartan |
+| `push_to_spartan.sh` | Push specific data files to Spartan | Local → Spartan |
+| `load_down_data.sh` | Download from `/data/projects/punim2039/` | Spartan → Local |
+| `load_down_home.sh` | Download from `/home/adidishe/` | Spartan → Local |
+
+### scripts/slurm/ — SLURM Job Scripts
+
+Each `.slurm` file is a batch job definition. They are copied to `/home/adidishe/<PROJECT>/` on Spartan (flat, alongside the Python files). Standard structure:
+
+```bash
+#!/bin/bash -l
+#SBATCH --job-name _01_run_0
+#SBATCH --output=/home/adidishe/<PROJECT>/out/_01_run_0_%a.out
+#SBATCH --error=/home/adidishe/<PROJECT>/out/_01_run_0_%a.err
+#SBATCH --chdir=/home/adidishe/<PROJECT>
+#SBATCH --array=0-11           # Parallel tasks (maps to $SLURM_ARRAY_TASK_ID)
+#SBATCH --nodes 1
+#SBATCH --ntasks 1
+#SBATCH --mem 16G
+#SBATCH --cpus-per-task 4
+#SBATCH --time 1-23:00:00
+
+# Load modules + venv (same block in every script)
+module load foss/2022a
+module load GCCcore/11.3.0; module load Python/3.10.4
+module load cuDNN/8.4.1.50-CUDA-11.7.0
+module load TensorFlow/2.11.0-CUDA-11.7.0-deeplearn
+module load OpenMPI/4.1.4; module load PyTorch/1.12.1-CUDA-11.7.0
+source ~/venvs/alpha_odds_venv/bin/activate
+
+python3 _01_run.py $SLURM_ARRAY_TASK_ID 0    # Script + positional args
+```
+
+**Key:** `$SLURM_ARRAY_TASK_ID` is passed as the first positional arg to Python scripts (becomes `args.a` via the custom parser).
+
+`load_module.sh` contains the same module + venv block — used by `srun` commands and can be sourced in scripts instead of repeating the block.
+
 ### Deploying Code
 ```bash
 bash scripts/sh/code_to_spartan.sh   # scp all .py files + slurm scripts to Spartan
 ```
-**Important:** On the server, all Python files from `_XX_` subdirectories are copied flat to `/home/adidishe/<PROJECT>/`. The subdirectory organization is local-only for development.
+**Important:** On the server, all Python files from `_XX_` subdirectories are copied **flat** to `/home/adidishe/<PROJECT>/`. The subdirectory organization is local-only. SLURM scripts from `scripts/slurm/` are also copied flat alongside the Python files.
 
 ### Submitting SLURM Jobs
 ```bash
