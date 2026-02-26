@@ -168,26 +168,41 @@ Replace `<HOME>` with the actual `$HOME` path. Preserve any existing settings.
 
 ---
 
-## Step 4: Tmux Helper Scripts
+## Step 4: Claude Launch Scripts
 
-**Skip check:** Check if `claude-new.sh`, `claude-attach.sh`, and `claude-kill-all.sh` already exist in the user's working directory (or `~/bin/claude-new` symlinks exist and work). If so, skip.
+**Skip check:** Check if `claude-local` and `claude-overnight-new` are already on PATH (`which claude-local` and `which claude-overnight-new`). If both exist, skip.
+
+Two modes:
+- **`claude-local`** — Runs Claude directly with `--dangerously-skip-permissions`. For quick local use.
+- **`claude-overnight-*`** — Runs Claude inside tmux so it survives SSH disconnects / laptop sleep. For persistent overnight sessions on VMs.
+
+**Overnight workflow** (run from a regular SSH terminal, NOT VS Code's integrated terminal):
+```
+ssh your-vm
+claude-overnight-new        # starts Claude in a tmux session
+# laptop sleeps... wake up later:
+ssh your-vm
+claude-overnight-attach     # reattach to the running session
+```
 
 **Only if not already configured — ASK the user**: "What is the path to your main working/code directory on this machine?"
 
 Then copy from this repo:
 ```bash
-cp ~/machine-setup/tmux/claude-new.sh <WORKING_DIR>/
-cp ~/machine-setup/tmux/claude-attach.sh <WORKING_DIR>/
-cp ~/machine-setup/tmux/claude-kill-all.sh <WORKING_DIR>/
+cp ~/machine-setup/tmux/claude-local.sh <WORKING_DIR>/
+cp ~/machine-setup/tmux/claude-overnight-new.sh <WORKING_DIR>/
+cp ~/machine-setup/tmux/claude-overnight-attach.sh <WORKING_DIR>/
+cp ~/machine-setup/tmux/claude-overnight-kill-all.sh <WORKING_DIR>/
 chmod +x <WORKING_DIR>/claude-*.sh
 ```
 
 Also add them to PATH for convenience:
 ```bash
 mkdir -p ~/bin
-ln -sf <WORKING_DIR>/claude-new.sh ~/bin/claude-new
-ln -sf <WORKING_DIR>/claude-attach.sh ~/bin/claude-attach
-ln -sf <WORKING_DIR>/claude-kill-all.sh ~/bin/claude-kill-all
+ln -sf <WORKING_DIR>/claude-local.sh ~/bin/claude-local
+ln -sf <WORKING_DIR>/claude-overnight-new.sh ~/bin/claude-overnight-new
+ln -sf <WORKING_DIR>/claude-overnight-attach.sh ~/bin/claude-overnight-attach
+ln -sf <WORKING_DIR>/claude-overnight-kill-all.sh ~/bin/claude-overnight-kill-all
 # Only add to .bashrc if not already there
 grep -q 'HOME/bin' ~/.bashrc || echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
 ```
@@ -253,7 +268,7 @@ Only check/report — never re-run steps here. Run each check and report pass/fa
 - [ ] **GitHub auth**: `gh auth status 2>&1 | grep -q "Logged in" && echo PASS || echo FAIL`
 - [ ] **Git identity**: `git config --global user.name` is non-empty
 - [ ] **Email MCP**: `grep -q '"email"' ~/.claude/settings.json 2>/dev/null && echo PASS || echo SKIP`
-- [ ] **Tmux scripts**: `which claude-new > /dev/null 2>&1 && echo PASS || echo FAIL`
+- [ ] **Claude scripts**: `which claude-local > /dev/null 2>&1 && which claude-overnight-new > /dev/null 2>&1 && echo PASS || echo FAIL`
 - [ ] **Spartan SSH**: `ssh -o BatchMode=yes -o ConnectTimeout=5 spartan "hostname" 2>/dev/null && echo PASS || echo SKIP`
 
 Print a summary table with status for each component. Only flag items as FAIL if they were attempted and didn't work. Items the user declined should show SKIP.
