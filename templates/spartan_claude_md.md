@@ -49,11 +49,37 @@ ssh spartan "cat /home/adidishe/<PROJECT>/out/tmp_run_<jobid>.out"
 
 **Do not wait more than 30 seconds for an `srun` to start.** If it doesn't start promptly, cancel it and use `sbatch` instead. Never let a blocked `srun` stall your work.
 
-### Directory Layout on Spartan
+### Spartan Filesystem Structure
+
+**Home directory:** `/home/adidishe/`
+**Persistent data project:** `/data/projects/punim2039/`
+**Virtual environments:** `/home/adidishe/venvs/`
+
+```
+/home/adidishe/                          # Home — scratch space, OK to delete
+├── <PROJECT>/                           # Code + SLURM scripts (flat, no subdirs)
+│   ├── *.py                             # All Python files (copied flat from local _XX_/ dirs)
+│   ├── *.slurm                          # SLURM job scripts
+│   ├── load_module.sh                   # Module loader + venv activation
+│   └── out/                             # SLURM stdout/stderr logs
+└── venvs/
+    └── alpha_odds_venv/                 # Shared Python venv (ML stack)
+        └── bin/activate
+
+/data/projects/punim2039/                # Persistent data — NEVER DELETE ANYTHING HERE
+└── <PROJECT>/
+    ├── data/                            # Raw & processed data (parquets, etc.)
+    └── res/                             # Results, models, features, reports
+```
+
+### Directory Permissions Summary
 | Path | Purpose | Can delete? |
 |------|---------|-------------|
+| `/home/adidishe/` | Home, code, scratch | YES |
 | `/home/adidishe/<PROJECT>/` | Code + SLURM scripts (flat structure) | YES |
 | `/home/adidishe/<PROJECT>/out/` | SLURM stdout/stderr logs | YES |
+| `/home/adidishe/venvs/` | Python virtual environments | YES (but will need rebuild) |
+| `/data/projects/punim2039/` | **All persistent data** | **NEVER** |
 | `/data/projects/punim2039/<PROJECT>/data/` | Raw & processed data | **NEVER** |
 | `/data/projects/punim2039/<PROJECT>/res/` | Results, models, features, reports | **NEVER** |
 
@@ -91,10 +117,15 @@ scp spartan:/data/projects/punim2039/<PROJECT>/res/<file> ./res/
 scp -r spartan:/home/adidishe/<PROJECT>/out/ ./spartan_logs/
 ```
 
-### SLURM Module Stack
-All SLURM scripts load: `foss/2022a`, `GCCcore/11.3.0`, `Python/3.10.4`, `cuDNN/8.4.1.50-CUDA-11.7.0`, `TensorFlow/2.11.0`, `PyTorch/1.12.1`. Venv: `~/venvs/alpha_odds_venv/bin/activate`.
+### SLURM Module Stack & Virtual Environment
+All SLURM scripts load these modules: `foss/2022a`, `GCCcore/11.3.0`, `Python/3.10.4`, `cuDNN/8.4.1.50-CUDA-11.7.0`, `TensorFlow/2.11.0`, `PyTorch/1.12.1`.
+
+Then activate the shared venv: `source ~/venvs/alpha_odds_venv/bin/activate`
+(contains: pandas, numpy, pyarrow, scikit-learn, xgboost, lightgbm, tqdm)
 
 For matplotlib (needed by report scripts): also `module load matplotlib/3.5.2`.
+
+The `load_module.sh` script in each project directory handles both module loading and venv activation.
 
 ### CRITICAL WORKFLOW RULE: Always Validate Before Proceeding
 
