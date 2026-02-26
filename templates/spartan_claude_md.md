@@ -21,6 +21,34 @@ ssh spartan    # Alias configured in ~/.ssh/config (user: adidishe)
 `srun` typically queues for 5-15 seconds then runs. For heavier interactive work, increase `--mem` and `--time`.
 `load_module.sh` loads the full module stack + activates the venv.
 
+### srun Contention — Fallback to sbatch
+
+**Before using `srun`, check if the interactive partition is already in use:**
+```bash
+ssh spartan "squeue -u adidishe -p interactive"
+```
+- If there is already an `srun` job running (another Claude session or the user), **do NOT queue another `srun`** — it may hang or block the other session.
+- Instead, fall back to `sbatch`: write your Python code to a temporary script, submit it via `sbatch`, and poll for results.
+
+**Fallback pattern:**
+```bash
+# 1. Write the script
+ssh spartan "cat > /home/adidishe/<PROJECT>/tmp_run.py << 'PYEOF'
+<your python code here>
+PYEOF"
+
+# 2. Submit via sbatch (one-liner SLURM wrapper)
+ssh spartan "cd /home/adidishe/<PROJECT> && sbatch --job-name=tmp_run --output=out/tmp_run_%j.out --time=00:10:00 --mem=16G --cpus-per-task=2 --wrap='source load_module.sh && python3 tmp_run.py'"
+
+# 3. Monitor until done
+ssh spartan "squeue -u adidishe -n tmp_run"
+
+# 4. Read output
+ssh spartan "cat /home/adidishe/<PROJECT>/out/tmp_run_<jobid>.out"
+```
+
+**Do not wait more than 30 seconds for an `srun` to start.** If it doesn't start promptly, cancel it and use `sbatch` instead. Never let a blocked `srun` stall your work.
+
 ### Directory Layout on Spartan
 | Path | Purpose | Can delete? |
 |------|---------|-------------|
