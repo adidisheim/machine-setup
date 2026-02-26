@@ -205,14 +205,13 @@ If no, skip entirely.
 If yes:
 
 **Only if `~/.ssh/config` doesn't have a spartan entry:**
-1. Set up SSH key for passwordless access:
+1. Generate SSH key:
 ```bash
 mkdir -p ~/.ssh && chmod 700 ~/.ssh
 ssh-keygen -t ed25519 -C "antoine.didisheim@unimelb.edu.au" -f ~/.ssh/spartan_key -N ""
-cat ~/.ssh/spartan_key.pub
 ```
-2. Tell the user to add this public key to Spartan (`~/.ssh/authorized_keys` on `spartan.hpc.unimelb.edu.au`)
-3. Configure SSH (only if entry doesn't exist):
+
+2. Configure SSH config (before copying the key, so ssh-copy-id can use it):
 ```bash
 grep -q "Host spartan" ~/.ssh/config 2>/dev/null || cat >> ~/.ssh/config << 'EOF'
 Host spartan
@@ -222,7 +221,25 @@ Host spartan
     StrictHostKeyChecking no
 EOF
 ```
-4. Test: `ssh spartan "hostname"`
+
+3. **Fix permissions** — `ssh-copy-id` will fail if `~/.ssh/config` is group/world-readable:
+```bash
+chmod 600 ~/.ssh/config
+chmod 700 ~/.ssh
+```
+
+4. Copy the key to Spartan using `ssh-copy-id` (the user will enter their Spartan password once):
+```bash
+ssh-copy-id -i ~/.ssh/spartan_key.pub adidishe@spartan.hpc.unimelb.edu.au
+```
+Tell the user: **"Enter your Spartan password when prompted. This is the only time you'll need it."**
+
+5. Test passwordless access:
+```bash
+ssh -o BatchMode=yes -o ConnectTimeout=10 spartan "hostname"
+```
+
+**Troubleshooting:** If `ssh-copy-id` fails with "Bad owner or permissions", re-run `chmod 600 ~/.ssh/config && chmod 700 ~/.ssh` and retry. Do NOT fall back to manually echoing keys into `authorized_keys` — `ssh-copy-id` handles idempotency and formatting correctly.
 
 **Spartan CLAUDE.md template:** Remind the user that `~/machine-setup/templates/spartan_claude_md.md` contains a full Spartan operations guide (with critical safety rules) that should be included in any project CLAUDE.md that uses Spartan. Print its path.
 
