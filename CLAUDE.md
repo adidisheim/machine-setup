@@ -282,3 +282,26 @@ Print a summary table with status for each component. Only flag items as FAIL if
 - Spartan user: `adidishe`
 - Spartan host: `spartan.hpc.unimelb.edu.au`
 - Email MCP repo: `https://github.com/adidisheim/claude-email-mcp.git`
+
+## Research Project Best Practices
+
+### Experiment Archiving
+
+For any research project, set up an `experiments/` folder to track all computational experiments. This creates an auditable history of what was tried, why, and what was learned.
+
+**Setup:**
+```bash
+mkdir -p experiments
+cp ~/machine-setup/templates/experiment_index.md experiments/INDEX.md
+cp ~/machine-setup/templates/experiment_template.md experiments/TEMPLATE.md
+```
+
+**Rule for CLAUDE.md:** Add this to any research project's CLAUDE.md:
+```
+After completing any experiment batch (training + eval), create an experiment archive:
+1. Create experiments/YYYY-MM-DD_short_name/ with code/, slurm/, README.md, results.json
+2. Update experiments/INDEX.md with one-line summary
+Keep archives lightweight: code + markdown + JSON only. No data or model weights.
+```
+
+Templates are in `~/machine-setup/templates/experiment_template.md` and `experiment_index.md`.
