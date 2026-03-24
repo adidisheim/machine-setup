@@ -189,9 +189,29 @@ ssh spartan "cd /home/adidishe/<PROJECT> && srun --partition=interactive --time=
 ssh spartan "cd /home/adidishe/<PROJECT> && srun --partition=interactive --time=00:30:00 --cpus-per-task=4 --mem=32G bash -c 'source load_module.sh && python3 my_script.py'"
 ```
 
-### Monitoring Jobs
+### Job Submission & Monitoring Protocol
+
+**Mandatory protocol after ANY `sbatch` submission:**
+
+1. Capture the job ID from sbatch output (`Submitted batch job 12345678`)
+2. Immediately launch the background monitor:
+   ```bash
+   # run_in_background: true
+   bash ~/bin/spartan-wait.sh <JOBID> "/home/adidishe/<PROJECT>/out/<script>_%a.out"
+   ```
+3. Continue other work — you will be **automatically notified** when the job finishes
+4. When notified, read the output files shown in the notification and verify success before proceeding
+
+**Critical rules:**
+- NEVER submit a job without launching `spartan-wait.sh` in the background
+- NEVER proceed to downstream steps without confirmation that the job finished
+- The monitor tracks by job ID — it only watches YOUR job, not other users'/instances' jobs
+- For array jobs, `squeue -j <JOBID>` naturally covers all array tasks — the monitor waits for ALL to complete
+
+### Manual Monitoring
 ```bash
 ssh spartan "squeue -u adidishe"                                            # List running jobs
+ssh spartan "squeue -j <JOBID>"                                             # Check specific job
 ssh spartan "tail -50 /home/adidishe/<PROJECT>/out/<job>.out"               # Check output
 ssh spartan "scancel <job_id>"                                              # Cancel a job
 ```

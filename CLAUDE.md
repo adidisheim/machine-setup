@@ -170,7 +170,7 @@ Replace `<HOME>` with the actual `$HOME` path. Preserve any existing settings.
 
 ## Step 3b: Telegram Channel Plugin
 
-**Skip check:** Check if `~/.claude/channels/telegram/.env` exists with a `TELEGRAM_BOT_TOKEN`. If yes, skip setup. Also check `~/.claude/plugins/cache/claude-plugins-official/telegram/` exists.
+**Skip check:** Check if `~/.claude/channels/telegram/.env` exists with a `TELEGRAM_BOT_TOKEN` AND the marketplace has the telegram plugin (`ls ~/.claude/plugins/marketplaces/claude-plugins-official/external_plugins/telegram/server.ts`). If both true, skip setup — just verify Bun is installed (`which bun`).
 
 **Only if not already configured — ASK the user**: "Do you want to set up Telegram notifications for Claude? This lets you chat with Claude from your phone while it runs on the VM."
 
@@ -178,13 +178,38 @@ If no, skip entirely.
 
 If yes, follow these steps:
 
-### Prerequisites
+### 1. Install Bun
+
 ```bash
-# Install Bun (required by the Telegram MCP server)
 which bun > /dev/null 2>&1 || (curl -fsSL https://bun.sh/install | bash)
+# Ensure bun is in PATH for current session
+export PATH="$HOME/.bun/bin:$PATH"
+bun --version
 ```
 
-### 1. Create a Telegram bot
+### 2. Add the official plugin marketplace (if not present)
+
+```bash
+# Check if marketplace exists
+if [ ! -d ~/.claude/plugins/marketplaces/claude-plugins-official ]; then
+    claude plugin marketplace add anthropics/claude-plugins-official
+fi
+# Update to latest
+claude plugin marketplace update
+```
+
+### 3. Install plugin dependencies
+
+**IMPORTANT:** `claude plugin install telegram@claude-plugins-official` often fails with "not found" errors or hangs waiting for TTY input. Skip it — install dependencies manually instead:
+
+```bash
+export PATH="$HOME/.bun/bin:$PATH"
+cd ~/.claude/plugins/marketplaces/claude-plugins-official/external_plugins/telegram
+bun install
+```
+
+### 4. Create a Telegram bot
+
 Tell the user:
 1. Open a chat with **@BotFather** on Telegram
 2. Send `/newbot`
@@ -192,52 +217,40 @@ Tell the user:
 4. **Copy the token** (looks like `123456789:AAHfiqksKZ8...`)
 5. Paste it here
 
-### 2. Install the plugin
-Start a temporary Claude session and run:
-```
-/plugin install telegram@claude-plugins-official
+### 5. Save the bot token
+
+```bash
+mkdir -p ~/.claude/channels/telegram
+echo "TELEGRAM_BOT_TOKEN=<PASTE_TOKEN_HERE>" > ~/.claude/channels/telegram/.env
+chmod 600 ~/.claude/channels/telegram/.env
 ```
 
-### 3. Configure the bot token
-In the same Claude session:
-```
-/telegram:configure <PASTE_TOKEN_HERE>
-```
-This writes the token to `~/.claude/channels/telegram/.env`.
+### 6. Launch and pair
 
-### 4. Pair your Telegram account
-1. Exit Claude and relaunch with: `claude --channels plugin:telegram@claude-plugins-official`
+The Telegram plugin is loaded via `--plugin-dir` (not `--channels` which requires formal plugin install). The `claude-telegram-new.sh` tmux script handles this automatically.
+
+Tell the user:
+1. Run `claude-telegram-new` (set up in Step 4 below)
 2. DM your bot on Telegram — it replies with a 6-character pairing code
-3. In the Claude session, run: `/telegram:access pair <code>`
+3. In the Claude tmux session, run: `/telegram:access pair <code>`
 4. Lock down access: `/telegram:access policy allowlist`
 
-### 5. Get your user ID
+### 7. Get your user ID (optional)
+
 Tell the user to message **@userinfobot** on Telegram to get their numeric user ID. This is used in the access control config.
 
-### Reference
-- Full docs: `github.com/anthropics/claude-plugins-official/blob/main/external_plugins/telegram/README.md`
-- Access control: `/telegram:access` skill in Claude
-- Photos: downloaded to `~/.claude/channels/telegram/inbox/`
-- No message history — bot only sees messages as they arrive
+### Troubleshooting
+
+- **Bot doesn't respond to DMs:** Check that Bun is in PATH inside tmux. The launch script must export `PATH="$HOME/.bun/bin:$PATH"` before calling `claude`.
+- **"TELEGRAM_BOT_TOKEN required" error:** Verify `~/.claude/channels/telegram/.env` exists with the correct token (no quotes around value).
+- **Plugin not loading:** Ensure `bun install` was run in the telegram plugin dir and `node_modules/` exists.
+- **`claude plugin install` fails:** This is a known issue — the CLI command needs an interactive TTY and often can't find external plugins. The manual `--plugin-dir` approach bypasses this entirely.
 
 ---
 
 ## Step 4: Claude Launch Scripts
 
-**Skip check:** Check if `claude-local` and `claude-overnight-new` are already on PATH (`which claude-local` and `which claude-overnight-new`). If both exist, skip.
-
-Two modes:
-- **`claude-local`** — Runs Claude directly with `--dangerously-skip-permissions`. For quick local use.
-- **`claude-overnight-*`** — Runs Claude inside tmux so it survives SSH disconnects / laptop sleep. For persistent overnight sessions on VMs.
-
-**Overnight workflow** (run from a regular SSH terminal, NOT VS Code's integrated terminal):
-```
-ssh your-vm
-claude-overnight-new        # starts Claude in a tmux session
-# laptop sleeps... wake up later:
-ssh your-vm
-claude-overnight-attach     # reattach to the running session
-```
+**Skip check:** Check if `claude-local.sh`, `claude-overnight-new.sh`, `claude-overnight-attach.sh`, `claude-overnight-kill-all.sh`, and `claude-telegram-new.sh` already exist in the user's working directory AND `~/bin/claude-local` symlinks exist. If so, skip.
 
 **Only if not already configured — ASK the user**: "What is the path to your main working/code directory on this machine?"
 
@@ -312,7 +325,14 @@ ssh -o BatchMode=yes -o ConnectTimeout=10 spartan "hostname"
 
 **Troubleshooting:** If `ssh-copy-id` fails with "Bad owner or permissions", re-run `chmod 600 ~/.ssh/config && chmod 700 ~/.ssh` and retry. Do NOT fall back to manually echoing keys into `authorized_keys` — `ssh-copy-id` handles idempotency and formatting correctly.
 
-**Spartan CLAUDE.md template:** Remind the user that `~/machine-setup/templates/spartan_claude_md.md` contains a full Spartan operations guide (with critical safety rules) that should be included in any project CLAUDE.md that uses Spartan. Print its path.
+**Deploy Spartan job monitor script:**
+```bash
+cp ~/machine-setup/scripts/spartan-wait.sh ~/bin/spartan-wait
+chmod +x ~/bin/spartan-wait
+```
+This script is used by Claude to automatically track `sbatch` jobs in the background. After any `sbatch` submission, Claude launches `spartan-wait <JOBID> [output_pattern]` with `run_in_background: true` and gets notified when the job finishes.
+
+**Spartan CLAUDE.md template:** Remind the user that `~/machine-setup/templates/spartan_claude_md.md` contains a full Spartan operations guide (with critical safety rules, including the mandatory job monitoring protocol) that should be included in any project CLAUDE.md that uses Spartan. Print its path.
 
 ---
 
@@ -324,7 +344,8 @@ Only check/report — never re-run steps here. Run each check and report pass/fa
 - [ ] **GitHub auth**: `gh auth status 2>&1 | grep -q "Logged in" && echo PASS || echo FAIL`
 - [ ] **Git identity**: `git config --global user.name` is non-empty
 - [ ] **Email MCP**: `grep -q '"email"' ~/.claude/settings.json 2>/dev/null && echo PASS || echo SKIP`
-- [ ] **Claude scripts**: `which claude-local > /dev/null 2>&1 && which claude-overnight-new > /dev/null 2>&1 && echo PASS || echo FAIL`
+- [ ] **Telegram plugin**: `[ -f ~/.claude/channels/telegram/.env ] && which bun > /dev/null 2>&1 && echo PASS || echo SKIP`
+- [ ] **Launch scripts**: `ls ~/bin/claude-local ~/bin/claude-telegram-new > /dev/null 2>&1 && echo PASS || echo FAIL`
 - [ ] **Spartan SSH**: `ssh -o BatchMode=yes -o ConnectTimeout=5 spartan "hostname" 2>/dev/null && echo PASS || echo SKIP`
 
 Print a summary table with status for each component. Only flag items as FAIL if they were attempted and didn't work. Items the user declined should show SKIP.
