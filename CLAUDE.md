@@ -168,6 +168,60 @@ Replace `<HOME>` with the actual `$HOME` path. Preserve any existing settings.
 
 ---
 
+## Step 3b: Telegram Channel Plugin
+
+**Skip check:** Check if `~/.claude/channels/telegram/.env` exists with a `TELEGRAM_BOT_TOKEN`. If yes, skip setup. Also check `~/.claude/plugins/cache/claude-plugins-official/telegram/` exists.
+
+**Only if not already configured — ASK the user**: "Do you want to set up Telegram notifications for Claude? This lets you chat with Claude from your phone while it runs on the VM."
+
+If no, skip entirely.
+
+If yes, follow these steps:
+
+### Prerequisites
+```bash
+# Install Bun (required by the Telegram MCP server)
+which bun > /dev/null 2>&1 || (curl -fsSL https://bun.sh/install | bash)
+```
+
+### 1. Create a Telegram bot
+Tell the user:
+1. Open a chat with **@BotFather** on Telegram
+2. Send `/newbot`
+3. Choose a name and username (must end in `bot`)
+4. **Copy the token** (looks like `123456789:AAHfiqksKZ8...`)
+5. Paste it here
+
+### 2. Install the plugin
+Start a temporary Claude session and run:
+```
+/plugin install telegram@claude-plugins-official
+```
+
+### 3. Configure the bot token
+In the same Claude session:
+```
+/telegram:configure <PASTE_TOKEN_HERE>
+```
+This writes the token to `~/.claude/channels/telegram/.env`.
+
+### 4. Pair your Telegram account
+1. Exit Claude and relaunch with: `claude --channels plugin:telegram@claude-plugins-official`
+2. DM your bot on Telegram — it replies with a 6-character pairing code
+3. In the Claude session, run: `/telegram:access pair <code>`
+4. Lock down access: `/telegram:access policy allowlist`
+
+### 5. Get your user ID
+Tell the user to message **@userinfobot** on Telegram to get their numeric user ID. This is used in the access control config.
+
+### Reference
+- Full docs: `github.com/anthropics/claude-plugins-official/blob/main/external_plugins/telegram/README.md`
+- Access control: `/telegram:access` skill in Claude
+- Photos: downloaded to `~/.claude/channels/telegram/inbox/`
+- No message history — bot only sees messages as they arrive
+
+---
+
 ## Step 4: Claude Launch Scripts
 
 **Skip check:** Check if `claude-local` and `claude-overnight-new` are already on PATH (`which claude-local` and `which claude-overnight-new`). If both exist, skip.
@@ -193,6 +247,7 @@ cp ~/machine-setup/tmux/claude-local.sh <WORKING_DIR>/
 cp ~/machine-setup/tmux/claude-overnight-new.sh <WORKING_DIR>/
 cp ~/machine-setup/tmux/claude-overnight-attach.sh <WORKING_DIR>/
 cp ~/machine-setup/tmux/claude-overnight-kill-all.sh <WORKING_DIR>/
+cp ~/machine-setup/tmux/claude-telegram-new.sh <WORKING_DIR>/
 chmod +x <WORKING_DIR>/claude-*.sh
 ```
 
@@ -203,6 +258,7 @@ ln -sf <WORKING_DIR>/claude-local.sh ~/bin/claude-local
 ln -sf <WORKING_DIR>/claude-overnight-new.sh ~/bin/claude-overnight-new
 ln -sf <WORKING_DIR>/claude-overnight-attach.sh ~/bin/claude-overnight-attach
 ln -sf <WORKING_DIR>/claude-overnight-kill-all.sh ~/bin/claude-overnight-kill-all
+ln -sf <WORKING_DIR>/claude-telegram-new.sh ~/bin/claude-telegram-new
 # Only add to .bashrc if not already there
 grep -q 'HOME/bin' ~/.bashrc || echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
 ```
