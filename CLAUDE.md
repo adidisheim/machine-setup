@@ -170,45 +170,61 @@ Replace `<HOME>` with the actual `$HOME` path. Preserve any existing settings.
 
 ## Step 3b: Telegram Channel Plugin
 
-**Skip check:** Check if `~/.claude/channels/telegram/.env` exists with a `TELEGRAM_BOT_TOKEN` AND the marketplace has the telegram plugin (`ls ~/.claude/plugins/marketplaces/claude-plugins-official/external_plugins/telegram/server.ts`). If both true, skip setup — just verify Bun is installed (`which bun`).
+**Skip check:** Check ALL of the following. If all pass, skip entirely:
+1. `~/.claude/channels/telegram/.env` exists with `TELEGRAM_BOT_TOKEN`
+2. `claude plugin list` shows telegram as enabled
+3. `which bun` succeeds
+4. `claude --version` shows >= 2.1.76
 
-**Only if not already configured — ASK the user**: "Do you want to set up Telegram notifications for Claude? This lets you chat with Claude from your phone while it runs on the VM."
+**Only if not already configured — ASK the user**: "Do you want to set up Telegram notifications for Claude? This lets you two-way chat with Claude from your phone while it runs on the VM."
 
 If no, skip entirely.
 
-If yes, follow these steps:
+If yes, follow these steps **in order**:
 
-### 1. Install Bun
+### 1. Ensure Claude Code >= 2.1.76
+
+**CRITICAL:** The `--channels` flag (required for two-way Telegram) and proper marketplace parsing only exist in Claude Code >= 2.1.76. Older versions will fail silently or error with "unknown option --channels".
+
+```bash
+claude --version
+# If < 2.1.76:
+sudo npm install -g @anthropic-ai/claude-code@latest
+```
+
+**Version gotcha:** `claude install stable` (native installer) may install an older version than npm. If multiple binaries exist, the wrong one may shadow the new one. After upgrading, verify you're running the right binary:
+
+```bash
+which -a claude   # Shows all binaries in PATH order
+claude --version  # Must be >= 2.1.76
+```
+
+If the wrong version is first in PATH, remove stale binaries:
+```bash
+# Common stale locations (check versions before removing):
+~/.local/bin/claude      # native installer (may be old)
+/usr/local/bin/claude    # old npm symlink
+/usr/bin/claude          # current npm install
+```
+
+### 2. Install Bun
 
 ```bash
 which bun > /dev/null 2>&1 || (curl -fsSL https://bun.sh/install | bash)
-# Ensure bun is in PATH for current session
 export PATH="$HOME/.bun/bin:$PATH"
 bun --version
 ```
 
-### 2. Add the official plugin marketplace (if not present)
+### 3. Add the official plugin marketplace
 
 ```bash
-# Check if marketplace exists
 if [ ! -d ~/.claude/plugins/marketplaces/claude-plugins-official ]; then
     claude plugin marketplace add anthropics/claude-plugins-official
 fi
-# Update to latest
 claude plugin marketplace update
 ```
 
-### 3. Install plugin dependencies
-
-**IMPORTANT:** `claude plugin install telegram@claude-plugins-official` often fails with "not found" errors or hangs waiting for TTY input. Skip it — install dependencies manually instead:
-
-```bash
-export PATH="$HOME/.bun/bin:$PATH"
-cd ~/.claude/plugins/marketplaces/claude-plugins-official/external_plugins/telegram
-bun install
-```
-
-### 4. Create a Telegram bot
+### 4. Create a Telegram bot (user action)
 
 Tell the user:
 1. Open a chat with **@BotFather** on Telegram
@@ -217,7 +233,52 @@ Tell the user:
 4. **Copy the token** (looks like `123456789:AAHfiqksKZ8...`)
 5. Paste it here
 
-### 5. Save the bot token
+### 5. Register the plugin (manual method — `claude plugin install` is broken)
+
+**WARNING:** `claude plugin install telegram@claude-plugins-official` fails with "Plugin not found" on many versions due to a marketplace schema validation bug (`git-subdir` source type not recognized). **Do NOT waste time retrying it.** Instead, register manually:
+
+**a) Create the plugin cache:**
+```bash
+export PATH="$HOME/.bun/bin:$PATH"
+SRC=~/.claude/plugins/marketplaces/claude-plugins-official/external_plugins/telegram
+DEST=~/.claude/plugins/cache/claude-plugins-official/telegram/0.0.1
+mkdir -p "$DEST"
+cp -r "$SRC"/.claude-plugin "$SRC"/server.ts "$SRC"/package.json "$SRC"/bun.lock \
+      "$SRC"/.mcp.json "$SRC"/.npmrc "$SRC"/LICENSE "$SRC"/README.md \
+      "$SRC"/ACCESS.md "$SRC"/skills "$DEST/"
+cd "$DEST" && bun install
+```
+
+**b) Create `~/.claude/plugins/installed_plugins.json`:**
+```json
+{
+  "version": 2,
+  "plugins": {
+    "telegram@claude-plugins-official": [{
+      "scope": "user",
+      "installPath": "~/.claude/plugins/cache/claude-plugins-official/telegram/0.0.1",
+      "version": "0.0.1"
+    }]
+  }
+}
+```
+
+**c) Add to `~/.claude/settings.json`** (merge, don't overwrite):
+```json
+{
+  "enabledPlugins": {
+    "telegram@claude-plugins-official": true
+  }
+}
+```
+
+**d) Verify:**
+```bash
+claude plugin list
+# Should show: telegram@claude-plugins-official — Version: 0.0.1 — Status: ✔ enabled
+```
+
+### 6. Save the bot token
 
 ```bash
 mkdir -p ~/.claude/channels/telegram
@@ -225,26 +286,28 @@ echo "TELEGRAM_BOT_TOKEN=<PASTE_TOKEN_HERE>" > ~/.claude/channels/telegram/.env
 chmod 600 ~/.claude/channels/telegram/.env
 ```
 
-### 6. Launch and pair
+### 7. Launch and pair
 
-The Telegram plugin is loaded via `--plugin-dir` (not `--channels` which requires formal plugin install). The `claude-telegram-new.sh` tmux script handles this automatically.
+Launch with the `claude-telegram-new` script (set up in Step 4 below), then:
 
-Tell the user:
-1. Run `claude-telegram-new` (set up in Step 4 below)
-2. DM your bot on Telegram — it replies with a 6-character pairing code
-3. In the Claude tmux session, run: `/telegram:access pair <code>`
-4. Lock down access: `/telegram:access policy allowlist`
+1. DM your bot on Telegram — it replies with a 6-character pairing code
+2. In the Claude tmux session, run: `/telegram:access pair <code>`
+3. Lock down access: `/telegram:access policy allowlist`
 
-### 7. Get your user ID (optional)
+The session runs in tmux — you can safely close the terminal and reconnect later with `tmux attach -t claude-tg-0`.
 
-Tell the user to message **@userinfobot** on Telegram to get their numeric user ID. This is used in the access control config.
+### 8. Get your user ID (optional)
+
+Message **@userinfobot** on Telegram to get your numeric user ID for access control.
 
 ### Troubleshooting
 
-- **Bot doesn't respond to DMs:** Check that Bun is in PATH inside tmux. The launch script must export `PATH="$HOME/.bun/bin:$PATH"` before calling `claude`.
-- **"TELEGRAM_BOT_TOKEN required" error:** Verify `~/.claude/channels/telegram/.env` exists with the correct token (no quotes around value).
-- **Plugin not loading:** Ensure `bun install` was run in the telegram plugin dir and `node_modules/` exists.
-- **`claude plugin install` fails:** This is a known issue — the CLI command needs an interactive TTY and often can't find external plugins. The manual `--plugin-dir` approach bypasses this entirely.
+- **"unknown option --channels":** Claude Code is too old. Must be >= 2.1.76. Run `sudo npm install -g @anthropic-ai/claude-code@latest`.
+- **One-way only (Claude sends but doesn't receive):** You're using `--plugin-dir` instead of `--channels`. The `--channels` flag is what enables two-way communication. Requires the plugin to be formally registered (Step 5 above).
+- **`claude plugin install` "not found":** Known bug — marketplace schema validation fails on `git-subdir` entries and rejects ALL plugins. Use the manual registration in Step 5 instead.
+- **Bot doesn't respond to DMs:** Check that Bun is in PATH inside tmux. The launch script must `export PATH="$HOME/.bun/bin:$PATH"` before calling claude.
+- **"TELEGRAM_BOT_TOKEN required":** Verify `~/.claude/channels/telegram/.env` exists with the correct token (no quotes around value).
+- **Multiple claude binaries:** Run `which -a claude` — the first hit wins. Remove stale old versions that shadow the npm install.
 
 ---
 
