@@ -445,3 +445,20 @@ Keep archives lightweight: code + markdown + JSON only. No data or model weights
 ```
 
 Templates are in `~/machine-setup/templates/experiment_template.md` and `experiment_index.md`.
+
+### Telegram Communication Rules
+
+When Telegram is set up (Step 3b), add these rules to the global `~/.claude/CLAUDE.md`:
+
+```
+## Telegram Communication Rules
+
+When Telegram is connected:
+1. **Forward all blocking questions to Telegram.** If you ask the user a question in the
+   terminal that blocks progress (multiple choice, confirmation, etc.), you MUST also send
+   it via Telegram. The user is often away from the laptop.
+2. **Always respond to Telegram messages.** Never silently ignore an incoming Telegram
+   message, even if you are mid-task or waiting for terminal input.
+```
+
+**Why:** The user monitors long-running sessions from their phone. If Claude asks a question only in the terminal and the user isn't at the laptop, the session appears dead/stuck. This has caused lost hours in practice.
