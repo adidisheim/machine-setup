@@ -399,7 +399,24 @@ This script is used by Claude to automatically track `sbatch` jobs in the backgr
 
 ---
 
-## Step 6: Final Verification
+## Step 6: Journal Command
+
+**Skip check:** Check if `~/.claude/commands/journal.md` exists. If yes, skip.
+
+Install the `/journal` slash command globally so it's available in every project:
+
+```bash
+mkdir -p ~/.claude/commands
+cp ~/machine-setup/commands/journal.md ~/.claude/commands/journal.md
+```
+
+Verify: `ls ~/.claude/commands/journal.md`
+
+Tell the user: **"The `/journal` command is now available. Run `/journal init` inside any research project to set up experiment/insight/goal tracking."**
+
+---
+
+## Step 7: Final Verification
 
 Only check/report — never re-run steps here. Run each check and report pass/fail:
 
@@ -425,26 +442,40 @@ Print a summary table with status for each component. Only flag items as FAIL if
 
 ## Research Project Best Practices
 
-### Experiment Archiving
+### Project Journal (`/journal` command)
 
-For any research project, set up an `experiments/` folder to track all computational experiments. This creates an auditable history of what was tried, why, and what was learned.
+Every research project should use the `/journal` system to track experiments, insights, goals, and working status across Claude sessions. This prevents context loss on crashes and session restarts.
 
-**Setup:**
+**Install the command (once per machine):**
+```bash
+mkdir -p ~/.claude/commands
+cp ~/machine-setup/commands/journal.md ~/.claude/commands/journal.md
+```
+
+**Initialize in a new project:**
+Run `/journal init` inside the project. This creates:
+```
+journal/
+├── experiments.md   # Experiment log with sequential keys (E01, E02...)
+├── insights.md      # What we learned, with evolution narrative
+├── goals.md         # Project objectives and priority list
+├── working.md       # Current work-in-progress (crash recovery)
+```
+
+And offers to add auto-update rules to the project's CLAUDE.md.
+
+**Also set up experiment archives:**
 ```bash
 mkdir -p experiments
 cp ~/machine-setup/templates/experiment_index.md experiments/INDEX.md
 cp ~/machine-setup/templates/experiment_template.md experiments/TEMPLATE.md
 ```
 
-**Rule for CLAUDE.md:** Add this to any research project's CLAUDE.md:
-```
-After completing any experiment batch (training + eval), create an experiment archive:
-1. Create experiments/YYYY-MM-DD_short_name/ with code/, slurm/, README.md, results.json
-2. Update experiments/INDEX.md with one-line summary
-Keep archives lightweight: code + markdown + JSON only. No data or model weights.
-```
+The `/journal archive <name>` command creates full experiment archives in `experiments/YYYY-MM-DD_<name>/` with code, scripts, results.json, and README.
 
-Templates are in `~/machine-setup/templates/experiment_template.md` and `experiment_index.md`.
+Templates: `~/machine-setup/templates/journal/` (journal files) and `~/machine-setup/templates/experiment_*.md` (experiment archives).
+
+The CLAUDE.md snippet for auto-updates is in `~/machine-setup/templates/journal_claude_md.md`.
 
 ### Telegram Communication Rules
 
