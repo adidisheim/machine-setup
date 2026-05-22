@@ -104,216 +104,9 @@ git config --global user.email "antoine.didisheim@unimelb.edu.au"
 
 ---
 
-## Step 3: Email MCP Server
+## Step 3: Claude Launch Scripts
 
-**Skip check:** Check ALL of the following. If all pass, skip entirely:
-1. Directory `~/claude-email-mcp` exists with `server.py` in it
-2. `~/claude-email-mcp/venv/bin/python3` exists
-3. `~/claude-email-mcp/token.json` exists (OAuth completed)
-4. `~/.claude/settings.json` contains `"email"` in mcpServers
-
-If the directory exists but some later steps are missing, resume from the missing step (don't re-clone).
-
-```bash
-# Clone only if not present
-if [ ! -d ~/claude-email-mcp ]; then
-    cd ~ && git clone https://github.com/adidisheim/claude-email-mcp.git
-fi
-cd ~/claude-email-mcp
-```
-
-**Only if `credentials.json` is missing — Interactive step:**
-1. Ask the user: **"Do you have the credentials.json file for the Gmail API? If yes, paste its contents or provide the path."**
-2. If they don't have it, guide them:
-   - Go to https://console.cloud.google.com
-   - Create/select a project, enable Gmail API
-   - Go to APIs & Services > Credentials
-   - Create OAuth 2.0 credentials (Desktop app type)
-   - Download the JSON
-3. Place it as `~/claude-email-mcp/credentials.json`
-
-**Only if venv doesn't exist:**
-```bash
-cd ~/claude-email-mcp
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-**Only if `token.json` doesn't exist:**
-```bash
-cd ~/claude-email-mcp
-source venv/bin/activate
-python3 -c "from gmail_client import GmailClient; GmailClient('credentials.json', 'token.json'); print('Auth successful!')"
-```
-
-**Only if `~/.claude/settings.json` doesn't have the email MCP configured:**
-```bash
-mkdir -p ~/.claude
-```
-Read existing `~/.claude/settings.json` (or start with `{}`), merge in:
-```json
-{
-  "mcpServers": {
-    "email": {
-      "command": "<HOME>/claude-email-mcp/venv/bin/python3",
-      "args": ["<HOME>/claude-email-mcp/server.py"]
-    }
-  }
-}
-```
-Replace `<HOME>` with the actual `$HOME` path. Preserve any existing settings.
-
-**Only if `config.json` has placeholder values:** Ask the user which email addresses should be in `allowed_senders`.
-
----
-
-## Step 3b: Telegram Channel Plugin
-
-**Skip check:** Check ALL of the following. If all pass, skip entirely:
-1. `~/.claude/channels/telegram/.env` exists with `TELEGRAM_BOT_TOKEN`
-2. `claude plugin list` shows telegram as enabled
-3. `which bun` succeeds
-4. `claude --version` shows >= 2.1.76
-
-**Only if not already configured — ASK the user**: "Do you want to set up Telegram notifications for Claude? This lets you two-way chat with Claude from your phone while it runs on the VM."
-
-If no, skip entirely.
-
-If yes, follow these steps **in order**:
-
-### 1. Ensure Claude Code >= 2.1.76
-
-**CRITICAL:** The `--channels` flag (required for two-way Telegram) and proper marketplace parsing only exist in Claude Code >= 2.1.76. Older versions will fail silently or error with "unknown option --channels".
-
-```bash
-claude --version
-# If < 2.1.76:
-sudo npm install -g @anthropic-ai/claude-code@latest
-```
-
-**Version gotcha:** `claude install stable` (native installer) may install an older version than npm. If multiple binaries exist, the wrong one may shadow the new one. After upgrading, verify you're running the right binary:
-
-```bash
-which -a claude   # Shows all binaries in PATH order
-claude --version  # Must be >= 2.1.76
-```
-
-If the wrong version is first in PATH, remove stale binaries:
-```bash
-# Common stale locations (check versions before removing):
-~/.local/bin/claude      # native installer (may be old)
-/usr/local/bin/claude    # old npm symlink
-/usr/bin/claude          # current npm install
-```
-
-### 2. Install Bun
-
-```bash
-which bun > /dev/null 2>&1 || (curl -fsSL https://bun.sh/install | bash)
-export PATH="$HOME/.bun/bin:$PATH"
-bun --version
-```
-
-### 3. Add the official plugin marketplace
-
-```bash
-if [ ! -d ~/.claude/plugins/marketplaces/claude-plugins-official ]; then
-    claude plugin marketplace add anthropics/claude-plugins-official
-fi
-claude plugin marketplace update
-```
-
-### 4. Create a Telegram bot (user action)
-
-Tell the user:
-1. Open a chat with **@BotFather** on Telegram
-2. Send `/newbot`
-3. Choose a name and username (must end in `bot`)
-4. **Copy the token** (looks like `123456789:AAHfiqksKZ8...`)
-5. Paste it here
-
-### 5. Register the plugin (manual method — `claude plugin install` is broken)
-
-**WARNING:** `claude plugin install telegram@claude-plugins-official` fails with "Plugin not found" on many versions due to a marketplace schema validation bug (`git-subdir` source type not recognized). **Do NOT waste time retrying it.** Instead, register manually:
-
-**a) Create the plugin cache:**
-```bash
-export PATH="$HOME/.bun/bin:$PATH"
-SRC=~/.claude/plugins/marketplaces/claude-plugins-official/external_plugins/telegram
-DEST=~/.claude/plugins/cache/claude-plugins-official/telegram/0.0.1
-mkdir -p "$DEST"
-cp -r "$SRC"/.claude-plugin "$SRC"/server.ts "$SRC"/package.json "$SRC"/bun.lock \
-      "$SRC"/.mcp.json "$SRC"/.npmrc "$SRC"/LICENSE "$SRC"/README.md \
-      "$SRC"/ACCESS.md "$SRC"/skills "$DEST/"
-cd "$DEST" && bun install
-```
-
-**b) Create `~/.claude/plugins/installed_plugins.json`:**
-```json
-{
-  "version": 2,
-  "plugins": {
-    "telegram@claude-plugins-official": [{
-      "scope": "user",
-      "installPath": "~/.claude/plugins/cache/claude-plugins-official/telegram/0.0.1",
-      "version": "0.0.1"
-    }]
-  }
-}
-```
-
-**c) Add to `~/.claude/settings.json`** (merge, don't overwrite):
-```json
-{
-  "enabledPlugins": {
-    "telegram@claude-plugins-official": true
-  }
-}
-```
-
-**d) Verify:**
-```bash
-claude plugin list
-# Should show: telegram@claude-plugins-official — Version: 0.0.1 — Status: ✔ enabled
-```
-
-### 6. Save the bot token
-
-```bash
-mkdir -p ~/.claude/channels/telegram
-echo "TELEGRAM_BOT_TOKEN=<PASTE_TOKEN_HERE>" > ~/.claude/channels/telegram/.env
-chmod 600 ~/.claude/channels/telegram/.env
-```
-
-### 7. Launch and pair
-
-Launch with the `claude-telegram-new` script (set up in Step 4 below), then:
-
-1. DM your bot on Telegram — it replies with a 6-character pairing code
-2. In the Claude tmux session, run: `/telegram:access pair <code>`
-3. Lock down access: `/telegram:access policy allowlist`
-
-The session runs in tmux — you can safely close the terminal and reconnect later with `tmux attach -t claude-tg-0`.
-
-### 8. Get your user ID (optional)
-
-Message **@userinfobot** on Telegram to get your numeric user ID for access control.
-
-### Troubleshooting
-
-- **"unknown option --channels":** Claude Code is too old. Must be >= 2.1.76. Run `sudo npm install -g @anthropic-ai/claude-code@latest`.
-- **One-way only (Claude sends but doesn't receive):** You're using `--plugin-dir` instead of `--channels`. The `--channels` flag is what enables two-way communication. Requires the plugin to be formally registered (Step 5 above).
-- **`claude plugin install` "not found":** Known bug — marketplace schema validation fails on `git-subdir` entries and rejects ALL plugins. Use the manual registration in Step 5 instead.
-- **Bot doesn't respond to DMs:** Check that Bun is in PATH inside tmux. The launch script must `export PATH="$HOME/.bun/bin:$PATH"` before calling claude.
-- **"TELEGRAM_BOT_TOKEN required":** Verify `~/.claude/channels/telegram/.env` exists with the correct token (no quotes around value).
-- **Multiple claude binaries:** Run `which -a claude` — the first hit wins. Remove stale old versions that shadow the npm install.
-
----
-
-## Step 4: Claude Launch Scripts
-
-**Skip check:** Check if `claude-local.sh`, `claude-overnight-new.sh`, `claude-overnight-attach.sh`, `claude-overnight-kill-all.sh`, and `claude-telegram-new.sh` already exist in the user's working directory AND `~/bin/claude-local` symlinks exist. If so, skip.
+**Skip check:** Check if `claude-local.sh`, `claude-overnight-new.sh`, `claude-overnight-attach.sh`, and `claude-overnight-kill-all.sh` already exist in the user's working directory AND `~/bin/claude-local` symlinks exist. If so, skip.
 
 **Only if not already configured — ASK the user**: "What is the path to your main working/code directory on this machine?"
 
@@ -323,7 +116,7 @@ cp ~/machine-setup/tmux/claude-local.sh <WORKING_DIR>/
 cp ~/machine-setup/tmux/claude-overnight-new.sh <WORKING_DIR>/
 cp ~/machine-setup/tmux/claude-overnight-attach.sh <WORKING_DIR>/
 cp ~/machine-setup/tmux/claude-overnight-kill-all.sh <WORKING_DIR>/
-cp ~/machine-setup/tmux/claude-telegram-new.sh <WORKING_DIR>/
+cp ~/machine-setup/tmux/claude-remote-new.sh <WORKING_DIR>/
 chmod +x <WORKING_DIR>/claude-*.sh
 ```
 
@@ -334,14 +127,16 @@ ln -sf <WORKING_DIR>/claude-local.sh ~/bin/claude-local
 ln -sf <WORKING_DIR>/claude-overnight-new.sh ~/bin/claude-overnight-new
 ln -sf <WORKING_DIR>/claude-overnight-attach.sh ~/bin/claude-overnight-attach
 ln -sf <WORKING_DIR>/claude-overnight-kill-all.sh ~/bin/claude-overnight-kill-all
-ln -sf <WORKING_DIR>/claude-telegram-new.sh ~/bin/claude-telegram-new
+ln -sf <WORKING_DIR>/claude-remote-new.sh ~/bin/claude-remote-new
 # Only add to .bashrc if not already there
 grep -q 'HOME/bin' ~/.bashrc || echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
 ```
 
+The main launcher is `claude-overnight-new`: it starts a persistent tmux session running Claude with the latest 1M-context Opus model and `/effort max` and `/compact auto` enabled.
+
 ---
 
-## Step 5: Spartan HPC Setup (if applicable)
+## Step 4: Spartan HPC Setup (if applicable)
 
 **Skip check:** Run `ssh -o BatchMode=yes -o ConnectTimeout=5 spartan "hostname" 2>/dev/null`. If this succeeds, Spartan SSH is already configured — skip to checking the CLAUDE.md template. If `~/.ssh/config` already has a `Host spartan` entry, also skip key generation.
 
@@ -399,33 +194,14 @@ This script is used by Claude to automatically track `sbatch` jobs in the backgr
 
 ---
 
-## Step 6: Journal Command
-
-**Skip check:** Check if `~/.claude/commands/journal.md` exists. If yes, skip.
-
-Install the `/journal` slash command globally so it's available in every project:
-
-```bash
-mkdir -p ~/.claude/commands
-cp ~/machine-setup/commands/journal.md ~/.claude/commands/journal.md
-```
-
-Verify: `ls ~/.claude/commands/journal.md`
-
-Tell the user: **"The `/journal` command is now available. Run `/journal init` inside any research project to set up experiment/insight/goal tracking."**
-
----
-
-## Step 7: Final Verification
+## Step 5: Final Verification
 
 Only check/report — never re-run steps here. Run each check and report pass/fail:
 
 - [ ] **Dropbox**: `pgrep -x dropbox > /dev/null && echo PASS || echo SKIP/FAIL`
 - [ ] **GitHub auth**: `gh auth status 2>&1 | grep -q "Logged in" && echo PASS || echo FAIL`
 - [ ] **Git identity**: `git config --global user.name` is non-empty
-- [ ] **Email MCP**: `grep -q '"email"' ~/.claude/settings.json 2>/dev/null && echo PASS || echo SKIP`
-- [ ] **Telegram plugin**: `[ -f ~/.claude/channels/telegram/.env ] && which bun > /dev/null 2>&1 && echo PASS || echo SKIP`
-- [ ] **Launch scripts**: `ls ~/bin/claude-local ~/bin/claude-telegram-new > /dev/null 2>&1 && echo PASS || echo FAIL`
+- [ ] **Launch scripts**: `ls ~/bin/claude-local ~/bin/claude-overnight-new > /dev/null 2>&1 && echo PASS || echo FAIL`
 - [ ] **Spartan SSH**: `ssh -o BatchMode=yes -o ConnectTimeout=5 spartan "hostname" 2>/dev/null && echo PASS || echo SKIP`
 
 Print a summary table with status for each component. Only flag items as FAIL if they were attempted and didn't work. Items the user declined should show SKIP.
@@ -438,58 +214,29 @@ Print a summary table with status for each component. Only flag items as FAIL if
 - Email: `antoine.didisheim@unimelb.edu.au`
 - Spartan user: `adidishe`
 - Spartan host: `spartan.hpc.unimelb.edu.au`
-- Email MCP repo: `https://github.com/adidisheim/claude-email-mcp.git`
+
+## Subagent Model Preference
+
+**Default to the latest Opus model for every subagent (Agent tool call). Never Sonnet, never Haiku.**
+
+When spawning subagents via the `Agent` tool, always pass `model: "opus"` unless the user has explicitly asked for a different model in the same request. The user prioritizes output quality over token cost, so cheaper models are not an acceptable default. The `opus` alias resolves to whatever the latest Opus generation is at the time of execution.
+
+If a project's own CLAUDE.md overrides this with a project-specific subagent model, follow that — but this is the default for any new project.
 
 ## Research Project Best Practices
 
-### Project Journal (`/journal` command)
+### Experiment Archives
 
-Every research project should use the `/journal` system to track experiments, insights, goals, and working status across Claude sessions. This prevents context loss on crashes and session restarts.
+For research projects, set up experiment archives so each completed experiment gets a frozen snapshot:
 
-**Install the command (once per machine):**
-```bash
-mkdir -p ~/.claude/commands
-cp ~/machine-setup/commands/journal.md ~/.claude/commands/journal.md
-```
-
-**Initialize in a new project:**
-Run `/journal init` inside the project. This creates:
-```
-journal/
-├── experiments.md   # Experiment log with sequential keys (E01, E02...)
-├── insights.md      # What we learned, with evolution narrative
-├── goals.md         # Project objectives and priority list
-├── working.md       # Current work-in-progress (crash recovery)
-```
-
-And offers to add auto-update rules to the project's CLAUDE.md.
-
-**Also set up experiment archives:**
 ```bash
 mkdir -p experiments
 cp ~/machine-setup/templates/experiment_index.md experiments/INDEX.md
 cp ~/machine-setup/templates/experiment_template.md experiments/TEMPLATE.md
 ```
 
-The `/journal archive <name>` command creates full experiment archives in `experiments/YYYY-MM-DD_<name>/` with code, scripts, results.json, and README.
+Each experiment goes in `experiments/YYYY-MM-DD_<name>/` with code, scripts, `results.json`, and a README. Update `experiments/INDEX.md` to list completed experiments.
 
-Templates: `~/machine-setup/templates/journal/` (journal files) and `~/machine-setup/templates/experiment_*.md` (experiment archives).
+Templates: `~/machine-setup/templates/experiment_*.md`.
 
-The CLAUDE.md snippet for auto-updates is in `~/machine-setup/templates/journal_claude_md.md`.
-
-### Telegram Communication Rules
-
-When Telegram is set up (Step 3b), add these rules to the global `~/.claude/CLAUDE.md`:
-
-```
-## Telegram Communication Rules
-
-When Telegram is connected:
-1. **Forward all blocking questions to Telegram.** If you ask the user a question in the
-   terminal that blocks progress (multiple choice, confirmation, etc.), you MUST also send
-   it via Telegram. The user is often away from the laptop.
-2. **Always respond to Telegram messages.** Never silently ignore an incoming Telegram
-   message, even if you are mid-task or waiting for terminal input.
-```
-
-**Why:** The user monitors long-running sessions from their phone. If Claude asks a question only in the terminal and the user isn't at the laptop, the session appears dead/stuck. This has caused lost hours in practice.
+> Cross-session state tracking (experiments-in-progress, insights, goals, working-context) is handled by Claude Code's built-in memory system at `~/.claude/projects/<project>/memory/MEMORY.md`. See the global `~/.claude/CLAUDE.md` for the auto-memory rules.
