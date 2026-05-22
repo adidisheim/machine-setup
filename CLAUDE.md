@@ -183,13 +183,6 @@ ssh -o BatchMode=yes -o ConnectTimeout=10 spartan "hostname"
 
 **Troubleshooting:** If `ssh-copy-id` fails with "Bad owner or permissions", re-run `chmod 600 ~/.ssh/config && chmod 700 ~/.ssh` and retry. Do NOT fall back to manually echoing keys into `authorized_keys` — `ssh-copy-id` handles idempotency and formatting correctly.
 
-**Deploy Spartan job monitor script:**
-```bash
-cp ~/machine-setup/scripts/spartan-wait.sh ~/bin/spartan-wait
-chmod +x ~/bin/spartan-wait
-```
-This script is used by Claude to automatically track `sbatch` jobs in the background. After any `sbatch` submission, Claude launches `spartan-wait <JOBID> [output_pattern]` with `run_in_background: true` and gets notified when the job finishes.
-
 **Spartan CLAUDE.md template:** Remind the user that `~/machine-setup/templates/spartan_claude_md.md` contains a full Spartan operations guide (with critical safety rules, including the mandatory job monitoring protocol) that should be included in any project CLAUDE.md that uses Spartan. Print its path.
 
 ---
